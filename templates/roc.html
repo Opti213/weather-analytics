@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <main role="main">
+
+        <!-- Main jumbotron for a primary marketing message or call to action -->
+        <div class="jumbotron">
+            <form enctype="multipart/form-data" method="post">
+                <p><input type="file" name="f">
+                    </p>
+                <p>
+                    <select name="type_of_data">
+                        <option value="h500">h500</option>
+                        <option value="t850">t850</option>
+                        <option value="merd">merd</option>
+                        <option value="prec">prec</option>
+                    </select>
+                </p>
+                <input type="submit" value="Отправить">
+            </form>
+        </div>
+
+    </main>
+{% endblock %}

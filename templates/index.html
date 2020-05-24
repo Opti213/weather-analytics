@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <main role="main">
+        <div class="list-group">
+            {% for table_name in table_names %}
+                <a href="/tables/{{ table_name }}"
+                   class="list-group-item list-group-item-action">{{ table_name }}</a>
+            {% endfor %}
+        </div>
+        <div style="padding-top: 10px">
+            <a href="/roc"
+               class="list-group-item list-group-item-action">ROC</a>
+        </div>
+    </main>
+{% endblock %}

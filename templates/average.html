@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+          integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+          crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+            integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+            crossorigin=""></script>
+    <script src="{{ url_for('static', path='/js/heatmap.min.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/leaflet-heatmap.js') }}"></script>
+    <main role="main">
+        <h2>{{ table_name }} / {{ start_date }} : {{ end_date }}</h2>
+
+        <div id="mapid" style="width: 1000px; height: 80vh;"></div>
+        <script>
+            var myHeaders = new Headers();
+            myHeaders.append("Content-Type", "multipart/form-data;");
+
+            var myFormdata = new FormData();
+            myFormdata.append("start_date", "{{start_date}}");
+            myFormdata.append("end_date", "{{end_date}}");
+
+            var requestOptions = {
+                method: 'POST',
+                body: myFormdata,
+            };
+
+
+
+            const bigdict = fetch("/tables/{{table_name}}/get_average_for_values/", requestOptions)
+                .then((resp) => resp.json())
+                .then(function (data) {
+
+
+                    var mymap = L.map('mapid').setView([0, 0], 2);
+
+                    L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoiY2hhbGV4eXVyIiwiYSI6ImNrM2V5ajJ5eDAwbDQzY2w3cjJjaWVkMXIifQ.7INTfOsirOeff2BKS0lCiQ', {
+                        maxZoom: 5,
+                        minZoom: 2,
+                        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+                            '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+                            'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+                        id: 'mapbox/outdoors-v10'
+                    }).addTo(mymap);
+
+                    var popup = L.popup();
+
+                    function onMapClick(e) {
+                        popup
+                            .setLatLng(e.latlng)
+                            .setContent("v" + e.latlng.toString())
+                            .openOn(mymap);
+                    }
+
+                    mymap.on('click', onMapClick);
+
+
+                    var testData = {
+                        max: 300,
+                        min: 230,
+                        data: data,
+                    };
+
+                    var cfg = {
+                        // radius should be small ONLY if scaleRadius is true (or small radius is intended)
+                        // if scaleRadius is false it will be the constant radius used in pixels
+                        radius: 4,
+                        maxOpacity: .8,
+                        minOpacity: 0.1,
+                        // scales the radius based on map zoom
+                        scaleRadius: true,
+                        // if set to false the heatmap uses the global maximum for colorization
+                        // if activated: uses the data maximum within the current map boundaries
+                        //   (there will always be a red spot with useLocalExtremas true)
+                        useLocalExtrema: false,
+                        // which field name in your data represents the latitude - default "lat"
+                        latField: 'lat',
+                        // which field name in your data represents the longitude - default "lng"
+                        lngField: 'lng',
+                        // which field name in your data represents the data value - default "value"
+                        valueField: 'count',
+                        gradient: {
+                            // enter n keys between 0 and 1 here
+                            // for gradient color customization
+                            '.4': '#000BE6',
+                            '.5': 'yellow',
+                            '.8': '#FFD416',
+                            '.9': '#ff7902',
+                            '.98': '#ff3500',
+                            '.99': 'red',
+                        },
+                        blur: .9,
+                    };
+                    var heatmapLayer = new HeatmapOverlay(cfg).addTo(mymap);
+
+
+                    heatmapLayer.setData(testData);
+
+                });
+        </script>
+
+
+    </main>
+{% endblock %}
+
+
+
