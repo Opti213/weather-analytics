@@ -57,24 +57,6 @@ async def get_bigdict_from_matrix(matrix: list):
     return bigdict
 
 
-@app.get('/')
-async def index(request: Request) -> templates.TemplateResponse:
-    table_names = ['h500', 'merd', 'prec', 't850']
-    context = {
-        'request': request,
-        'table_names': table_names
-    }
-    return templates.TemplateResponse('index.html', context)
-
-
-@app.get('/roc')
-async def upload_roc(request: Request) -> HTMLResponse:
-    context = {
-        'request': request,
-    }
-    return templates.TemplateResponse("roc.html", context)
-
-
 def get_false_roc_dots():
     y = np.array([random.randint(0, 10) for _ in range(100)])
     scores = np.array([random.randint(2, 7) for _ in range(100)])
@@ -117,6 +99,7 @@ def read_target(target_bytes: bytes) -> numpy.array:
         data = io.ByteIO(target_bytes)
         while True:
             yield struct.unpack('f', data.read(4))[0]
+
     target = target_gen()
 
     # xdef 144 linear 0.000000 2.500000
@@ -147,15 +130,36 @@ def read_target(target_bytes: bytes) -> numpy.array:
     return res
 
 
+@app.get('/')
+async def index(request: Request) -> templates.TemplateResponse:
+    table_names = ['h500', 'merd', 'prec', 't850']
+    context = {
+        'request': request,
+        'table_names': table_names
+    }
+    return templates.TemplateResponse('index.html', context)
+
+
+@app.get('/roc')
+async def upload_roc(request: Request) -> HTMLResponse:
+    context = {
+        'request': request,
+    }
+    return templates.TemplateResponse("roc.html", context)
+
+
 @app.post('/roc')
-async def upload_roc(*, f: bytes = File(...), type_of_data: str = Form(...)) -> Any:
+async def upload_roc(*, request: Request, f: bytes = File(...),
+                     type_of_data: str = Form(...)) -> Any:
     # todo correct data
-    # scope = await get_scope(type_of_data)
     target = read_target(f)
     # fpr, tpr, roc_auc = get_roc_dots()
     fpr, tpr, roc_auc = get_false_roc_dots()
     roc = render_roc(fpr, tpr, roc_auc)
-    return FileResponse(roc)
+    context = {
+        "request": request,
+        "links": ["favicon-96x96.png"]}
+    return templates.TemplateResponse('links.html', context=context)
 
 
 @app.get('/tables/{table_name}')

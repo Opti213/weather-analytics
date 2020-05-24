@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <main role="main">
+        <div class="list-group">
+            {% for link in links %}
+                <a href="/static/{{ link }}"
+                   class="list-group-item list-group-item-action">{{ link }}</a>
+            {% endfor %}
+        </div>
+    </main>
+{% endblock %}
