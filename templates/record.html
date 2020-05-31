@@ -13,7 +13,7 @@
 
         <div id="mapid" style="width: 1000px; height: 80vh;"></div>
         <script>
-            const bigdict = fetch("/tables/{{ table_name }}/records/{{record_id}}/bigdict")
+            const bigdict = fetch("/tables/{{ table_name }}/records/{{record_id}}/anomaly")
                 .then((resp) => resp.json())
                 .then(function (data) {
 
@@ -42,15 +42,15 @@
 
 
                     var testData = {
-                        max: 300,
-                        min: 230,
+                        max: 50,
+                        min: -50,
                         data: data,
                     };
 
                     var cfg = {
                         // radius should be small ONLY if scaleRadius is true (or small radius is intended)
                         // if scaleRadius is false it will be the constant radius used in pixels
-                        radius: 4,
+                        radius: 2,
                         maxOpacity: .8,
                         minOpacity: 0.1,
                         // scales the radius based on map zoom
@@ -68,19 +68,19 @@
                         gradient: {
                             // enter n keys between 0 and 1 here
                             // for gradient color customization
-                            '.4': '#000BE6',
+                            '0': 'blue',
                             '.5': 'yellow',
-                            '.8': '#FFD416',
-                            '.9': '#ff7902',
-                            '.98': '#ff3500',
-                            '.99': 'red',
+                            '1': 'red',
                         },
                         blur: .9,
                     };
+
+
                     var heatmapLayer = new HeatmapOverlay(cfg).addTo(mymap);
 
 
                     heatmapLayer.setData(testData);
+
 
                 });
         </script>

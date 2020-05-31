@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import io
 import random
 import struct
@@ -6,6 +7,7 @@ from datetime import date
 from typing import Any, List
 
 import matplotlib.pyplot as plt
+import pool as pool
 
 from sklearn import svm, datasets, metrics
 from sklearn.metrics import roc_curve, auc
@@ -14,7 +16,7 @@ import buildpg
 import numpy
 import numpy as np
 import uvicorn
-from asyncpg import Connection, connect
+from asyncpg import Connection, connect, pool, create_pool
 from fastapi import FastAPI, Form, File, UploadFile
 from pydantic import BaseModel
 from pypika import Query, Table, Order
@@ -152,13 +154,13 @@ async def upload_roc(request: Request) -> HTMLResponse:
 async def upload_roc(*, request: Request, f: bytes = File(...),
                      type_of_data: str = Form(...)) -> Any:
     # todo correct data
-    target = read_target(f)
+    # target = read_target(f)
     # fpr, tpr, roc_auc = get_roc_dots()
     fpr, tpr, roc_auc = get_false_roc_dots()
     roc = render_roc(fpr, tpr, roc_auc)
     context = {
         "request": request,
-        "links": ["favicon-96x96.png"]}
+        "links": ["roc_l.png", "roc_m.png", "roc_h.png"]}
     return templates.TemplateResponse('links.html', context=context)
 
 
@@ -183,8 +185,11 @@ async def table_view(request: Request, table_name: str) -> templates.TemplateRes
 
 
 @app.get('/tables/{table_name}/records/{record_id}')
-async def record_view(request: Request, table_name: str,
-                      record_id: int) -> templates.TemplateResponse:
+async def record_view(
+        request: Request,
+        table_name: str,
+        record_id: int
+) -> templates.TemplateResponse:
     conn: Connection = app.state.connection
     table = Table(table_name)
     record = await conn.fetchrow(
@@ -222,31 +227,31 @@ async def get_average_for_values(
         start_date: date = Form(...),
         end_date: date = Form(...),
 ) -> JSONResponse:
-    conn: Connection = app.state.connection
+    conn = app.state.connection
     query, args = buildpg.render(
         """
-    SELECT
-        avg(transponed_arrays.element :: numeric)
-    FROM
-        :table_name,
-        LATERAL (
-            SELECT
-                val ->> length_series.idx element,
-                length_series.idx idx
-            FROM
-                (
-                    SELECT
-                        generate_series(0, jsonb_array_length(val) - 1)
-                ) length_series(idx)
-        ) transponed_arrays
-    WHERE
-        :table_name.dat BETWEEN :start_date
-        AND :end_date
-    GROUP BY
-        transponed_arrays.idx
-    ORDER BY
-        transponed_arrays.idx;
-    """,
+        SELECT
+            avg(transponed_arrays.element :: numeric)
+        FROM
+            :table_name,
+            LATERAL (
+                SELECT
+                    val ->> length_series.idx element,
+                    length_series.idx idx
+                FROM
+                    (
+                        SELECT
+                            generate_series(0, jsonb_array_length(val) - 1)
+                    ) length_series(idx)
+            ) transponed_arrays
+        WHERE
+            :table_name.dat BETWEEN :start_date
+            AND :end_date
+        GROUP BY
+            transponed_arrays.idx
+        ORDER BY
+            transponed_arrays.idx;
+        """,
         table_name=buildpg.V(table_name),
         start_date=start_date,
         end_date=end_date,
@@ -254,6 +259,54 @@ async def get_average_for_values(
     calculated_values = await conn.fetch(query, *args)
     values = [rec[0] for rec in calculated_values]
     bigdict = await get_bigdict_from_matrix(values)
+    return JSONResponse(bigdict)
+
+
+@app.get('/tables/{table_name}/records/{record_id}/anomaly/')
+async def get_anomaly(table_name: str, record_id: int):
+    pool = app.state.pool
+    table = Table(table_name)
+    async with pool.acquire() as conn:
+        record = await conn.fetchrow(
+            str((Query.from_(table)
+                 .select(table.val)
+                 .where(table.id == record_id)))
+        )
+        matrix = record[0]
+        matrix = matrix[1:-1]
+        current_day = list(matrix.split(', '))
+    query, args = buildpg.render(
+        """
+        SELECT
+            avg(transponed_arrays.element :: numeric)
+        FROM
+            :table_name,
+            LATERAL (
+                SELECT
+                    val ->> length_series.idx element,
+                    length_series.idx idx
+                FROM
+                    (
+                        SELECT
+                            generate_series(0, jsonb_array_length(val) - 1)
+                    ) length_series(idx)
+            ) transponed_arrays
+        WHERE id = 1
+        GROUP BY
+            transponed_arrays.idx
+        ORDER BY
+            transponed_arrays.idx;
+        """,
+        table_name=buildpg.V(table_name),
+    )
+    async with pool.acquire() as conn:
+        calculated_values = await conn.fetch(query, *args)
+        avg_values = [rec[0] for rec in calculated_values]
+    print(avg_values[0], current_day[0], len(avg_values), len(current_day))
+    mok = [random.choice(current_day) for _ in current_day]
+    anomaly = [int(a) - int(b) for a, b in zip(current_day, mok)]
+    bigdict = await get_bigdict_from_matrix(anomaly)
+    print([a["count"] for a in bigdict])
     return JSONResponse(bigdict)
 
 
@@ -294,11 +347,13 @@ async def server_error(request, exc):
 
 @app.on_event('startup')
 async def app_init():
+    app.state.pool = await create_pool(DATABASE_URL)
     app.state.connection = await connect(DATABASE_URL)
 
 
 @app.on_event('shutdown')
 async def app_stop():
+    await app.state.pool.close()
     await app.state.connection.close()
 
 
