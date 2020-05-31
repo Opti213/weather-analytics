@@ -3,7 +3,7 @@ import asyncio
 import io
 import random
 import struct
-from datetime import date
+from datetime import date, datetime
 from typing import Any, List
 
 import matplotlib.pyplot as plt
@@ -269,9 +269,10 @@ async def get_anomaly(table_name: str, record_id: int):
     async with pool.acquire() as conn:
         record = await conn.fetchrow(
             str((Query.from_(table)
-                 .select(table.val)
+                 .select(table.val, table.dat)
                  .where(table.id == record_id)))
         )
+        target_date = record[1]
         matrix = record[0]
         matrix = matrix[1:-1]
         current_day = list(matrix.split(', '))
@@ -291,22 +292,20 @@ async def get_anomaly(table_name: str, record_id: int):
                             generate_series(0, jsonb_array_length(val) - 1)
                     ) length_series(idx)
             ) transponed_arrays
-        WHERE id = 1
+        WHERE (to_char(dat, 'DD') = to_char(:target::date, 'DD') and to_char(dat, 'MM') = to_char(:target::date, 'MM') )
         GROUP BY
             transponed_arrays.idx
         ORDER BY
             transponed_arrays.idx;
         """,
         table_name=buildpg.V(table_name),
+        target=target_date
     )
     async with pool.acquire() as conn:
         calculated_values = await conn.fetch(query, *args)
         avg_values = [rec[0] for rec in calculated_values]
-    print(avg_values[0], current_day[0], len(avg_values), len(current_day))
-    mok = [random.choice(current_day) for _ in current_day]
-    anomaly = [int(a) - int(b) for a, b in zip(current_day, mok)]
+    anomaly = [int(a) - int(b) for a, b in zip(current_day, avg_values)]
     bigdict = await get_bigdict_from_matrix(anomaly)
-    print([a["count"] for a in bigdict])
     return JSONResponse(bigdict)
 
 
