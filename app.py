@@ -170,7 +170,7 @@ async def table_view(request: Request, table_name: str) -> templates.TemplateRes
     table = Table(table_name)
     records = await conn.fetch(
         str((Query.from_(table)
-             .select(table.id))
+             .select(table.dat))
             .orderby('id', order=Order.desc)
             .limit(10))
     )
@@ -259,6 +259,78 @@ async def get_average_for_values(
     calculated_values = await conn.fetch(query, *args)
     values = [rec[0] for rec in calculated_values]
     bigdict = await get_bigdict_from_matrix(values)
+    return JSONResponse(bigdict)
+
+@app.get('/tables/{table_name}/{record_id}/anomaly/per_month')
+async def get_anomaly(table_name: str, record_id: int):
+    pool = app.state.pool
+    table = Table(table_name)
+    async with pool.acquire() as conn:
+        record = await conn.fetchrow(
+            str((Query.from_(table)
+                 .select(table.val, table.dat)
+                 .where(table.id == record_id)))
+        )
+        target_date = record[1]
+        matrix = record[0]
+        matrix = matrix[1:-1]
+        current_day = list(matrix.split(', '))
+
+    query, args = buildpg.render(
+        """
+        SELECT
+            avg(transponed_arrays.element :: numeric)
+        FROM
+            :table_name,
+            LATERAL (
+                SELECT
+                    val ->> length_series.idx element,
+                    length_series.idx idx
+                FROM
+                    (
+                        SELECT
+                            generate_series(0, jsonb_array_length(val) - 1)
+                    ) length_series(idx)
+            ) transponed_arrays
+        WHERE ((to_char(dat, 'YY') = to_char(:target::date, 'YY')) and (to_char(dat, 'MM') = to_char(:target::date, 'MM')))
+        GROUP BY
+            transponed_arrays.idx
+        ORDER BY
+            transponed_arrays.idx;
+        """,
+        table_name=buildpg.V(table_name),
+        target=target_date
+    )
+    query, args = buildpg.render(
+        """
+        SELECT
+            avg(transponed_arrays.element :: numeric)
+        FROM
+            :table_name,
+            LATERAL (
+                SELECT
+                    val ->> length_series.idx element,
+                    length_series.idx idx
+                FROM
+                    (
+                        SELECT
+                            generate_series(0, jsonb_array_length(val) - 1)
+                    ) length_series(idx)
+            ) transponed_arrays
+        WHERE (to_char(dat, 'MM') = to_char(:target::date, 'MM'))
+        GROUP BY
+            transponed_arrays.idx
+        ORDER BY
+            transponed_arrays.idx;
+        """,
+        table_name=buildpg.V(table_name),
+        target=target_date
+    )
+    async with pool.acquire() as conn:
+        calculated_values = await conn.fetch(query, *args)
+        avg_values = [rec[0] for rec in calculated_values]
+    anomaly = [int(a) - int(b) for a, b in zip(current_day, avg_values)]
+    bigdict = await get_bigdict_from_matrix(anomaly)
     return JSONResponse(bigdict)
 
 
