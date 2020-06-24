@@ -4,13 +4,6 @@
     <main role="main">
     <h2>{{ table_name }}</h2>
         <div class="row">
-            <div class="col-md-4">
-                <div class="list-group">
-                    {% for record in id_list %}
-                        <a href="/tables/{{ table_name }}/records/{{ record }}" class="list-group-item list-group-item-action">{{ record }}</a>
-                    {% endfor %}
-                </div>
-            </div>
             <div class="col-md-8" >
                 <form action="/tables/{{ table_name }}/average/" method="post">
                     <div class="form-group row ">
